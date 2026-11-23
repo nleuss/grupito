@@ -1,0 +1,34 @@
+{
+  "name": "vidioma",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome extension for learning languages with dual subtitles on Netflix, YouTube, Disney+, Prime Video and local videos.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:test": "node scripts/build.mjs --test",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "node scripts/build.mjs --test && node --test --test-concurrency=1 tests/e2e/extension.test.mjs",
+    "zip": "node scripts/build.mjs && node scripts/zip.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.6.0",
+    "@breezystack/lamejs": "1.2.7",
+    "fflate": "0.8.3",
+    "kuromoji": "0.1.2",
+    "pinyin-pro": "3.29.5",
+    "preact": "10.29.8",
+    "sql.js": "1.15.2",
+    "wanakana": "5.3.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.3.7",
+    "esbuild": "0.28.2",
+    "jsdom": "31.0.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.12"
+  }
+}

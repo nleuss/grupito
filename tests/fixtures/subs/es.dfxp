@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xml:lang="es">
+  <body><div>
+      <p begin="00:00:01.100" end="00:00:03.400">Hola, ¿cómo estás hoy?</p>
+      <p begin="00:00:04.100" end="00:00:06.400">Estoy aprendiendo español con películas.</p>
+      <p begin="00:00:07.100" end="00:00:09.400">Hace un tiempo precioso esta mañana.</p>
+      <p begin="00:00:10.100" end="00:00:12.400">¿Te apetece una taza de café?</p>
+      <p begin="00:00:13.100" end="00:00:15.400">Vamos a la playa mañana.</p>
+      <p begin="00:00:16.100" end="00:00:18.400">No entiendo esta palabra.</p>
+      <p begin="00:00:19.100" end="00:00:21.400">¿Puedes hablar más despacio, por favor?</p>
+      <p begin="00:00:22.100" end="00:00:24.400">Muchas gracias por tu ayuda.</p>
+      <p begin="00:00:25.100" end="00:00:27.400">Hasta luego, amigo.</p>
+  </div></body>
+</tt>

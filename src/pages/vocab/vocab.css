@@ -1,0 +1,105 @@
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.top {
+  font-size: 20px;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  position: sticky;
+  top: 8px;
+  z-index: 2;
+}
+.toolbar .input {
+  width: auto;
+}
+.toolbar .search {
+  min-width: 220px;
+  flex: 0 1 280px;
+}
+.empty {
+  padding: 40px;
+  text-align: center;
+  color: var(--muted);
+}
+.table-wrap {
+  overflow-x: auto;
+}
+table.vocab {
+  width: 100%;
+  border-collapse: collapse;
+}
+.vocab th {
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.vocab td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.vocab tr:last-child td {
+  border-bottom: 0;
+}
+.vocab tr.sel td {
+  background: var(--accent-soft);
+}
+.vocab .check {
+  width: 36px;
+}
+.vocab .word {
+  min-width: 180px;
+}
+.vocab .w {
+  font-size: 17px;
+  font-weight: 650;
+}
+.vocab .s {
+  font-weight: 500;
+}
+.vocab .ctx {
+  max-width: 380px;
+}
+.vocab .src {
+  max-width: 200px;
+}
+.vocab .def {
+  margin-top: 4px;
+}
+.vocab .status {
+  width: auto;
+  padding: 4px 6px;
+}
+.editable {
+  min-width: 120px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  outline: none;
+}
+.editable:hover {
+  background: var(--surface-2);
+}
+.editable:focus {
+  background: var(--surface);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.editable:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+}

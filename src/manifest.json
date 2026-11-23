@@ -1,0 +1,61 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_appName__",
+  "description": "__MSG_appDesc__",
+  "version": "0.0.0",
+  "default_locale": "en",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "pages/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "options_page": "pages/options.html",
+  "permissions": ["storage", "unlimitedStorage", "offscreen", "tabCapture", "activeTab", "scripting"],
+  "host_permissions": [
+    "https://www.netflix.com/*",
+    "https://*.nflxvideo.net/*",
+    "https://www.youtube.com/*",
+    "https://m.youtube.com/*",
+    "https://www.disneyplus.com/*",
+    "https://*.dssott.com/*",
+    "https://*.disney-plus.net/*",
+    "https://*.bamgrid.com/*",
+    "https://www.primevideo.com/*",
+    "https://*.pv-cdn.net/*",
+    "https://*.cloudfront.net/*",
+    "https://*.media-amazon.com/*",
+    "https://*.aiv-cdn.net/*",
+    "https://translate.googleapis.com/*",
+    "https://api-free.deepl.com/*",
+    "https://api.deepl.com/*",
+    "https://api.anthropic.com/*",
+    "https://api.openai.com/*",
+    "https://api.groq.com/*",
+    "https://en.wiktionary.org/*",
+    "http://127.0.0.1:8765/*",
+    "http://localhost:8765/*"
+  ],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "commands": {
+    "toggle-ai-captions": {
+      "suggested_key": { "default": "Alt+Shift+C" },
+      "description": "__MSG_cmdAiCaptions__"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}

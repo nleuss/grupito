@@ -1,0 +1,5 @@
+{
+  "appName": { "message": "Vidioma" },
+  "appDesc": { "message": "Learn languages with dual subtitles on Netflix, YouTube, Disney+, Prime Video and your own videos. Click any word for its meaning." },
+  "cmdAiCaptions": { "message": "Start/stop AI captions (transcribe the tab's audio)" }
+}

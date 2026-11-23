@@ -1,0 +1,76 @@
+body {
+  width: 380px;
+  min-height: 200px;
+}
+.popup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+.pad {
+  padding: 16px;
+}
+header {
+  font-size: 16px;
+}
+.langs {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  align-items: end;
+}
+.langs label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.langs .arrow {
+  padding-bottom: 8px;
+  color: var(--muted);
+}
+.status {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.status .title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.ai {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wide {
+  width: 100%;
+}
+.toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.toggles label {
+  cursor: pointer;
+}
+.links {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+.links .btn {
+  font-size: 12.5px;
+  padding: 7px 6px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25;
+}
+.error {
+  color: var(--danger);
+}
