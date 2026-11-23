@@ -1,4 +1,4 @@
-// Mock web server for E2E tests: imitates the parts of Netflix / YouTube / Disney+ / Prime Video
+// Mock web server for E2E tests: imitates the parts of YouTube and Netflix
 // that the extension depends on (manifests, caption APIs, playlists), plus a mock speech-to-text API.
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -103,15 +103,21 @@ export function startServer() {
 <div class="player-timedtext">NATIVE NETFLIX SUBS</div>
 <video id="v" src="/media/test.webm" style="width:960px;height:540px" muted preload="auto"></video></div>
 <script>
-  window.__manifestRequest = JSON.stringify({ version: 2, url: '/manifest', params: { type: 'standard', viewableId: ${id}, profiles: ['playready-h264mpl30-dash'] } });
+  window.__manifestRequest = JSON.stringify({ version: 2, url: 'licensedManifest', id: 1700000000000, languages: ['en-US'], params: { type: 'standard', viewableId: ${id}, profiles: ['playready-h264mpl30-dash', 'heaac-2-dash'], showAllSubDubTracks: false } });
   setTimeout(() => {
     JSON.parse(${JSON.stringify(JSON.stringify(manifest))});
     JSON.parse(${JSON.stringify(JSON.stringify(next) + ' '.repeat(600))});
   }, 300);
   window.__seeks = [];
+  window.__playerCalls = [];
+  const v = () => document.getElementById('v');
   window.netflix = { appContext: { state: { playerApp: { getAPI: () => ({ videoPlayer: {
     getAllPlayerSessionIds: () => ['watch-session'],
-    getVideoPlayerBySessionId: () => ({ seek: (ms) => { window.__seeks.push(ms); document.getElementById('v').currentTime = ms / 1000; } }),
+    getVideoPlayerBySessionId: () => ({
+      seek: (ms) => { window.__seeks.push(ms); v().currentTime = ms / 1000; },
+      play: () => { window.__playerCalls.push('play'); v().play().catch(() => {}); },
+      pause: () => { window.__playerCalls.push('pause'); v().pause(); },
+    }),
   } }) } } } };
 </script>`));
       }
@@ -132,73 +138,40 @@ export function startServer() {
   const player = document.getElementById('movie_player');
   player.getPlayerResponse = () => pr;
   player.loadModule = () => {};
-  player.setOption = (m, o, v) => {
-    window.__setOption = v;
-    fetch('/api/timedtext?v=abc123&lang=' + v.languageCode + (v.kind ? '&kind=' + v.kind : '') + '&fmt=json3&pot=POT123&c=WEB&cver=2.20240101');
-  };
+  // What YouTube's player does: request the selected track with its token and client parameters.
+  const requestCaptions = (lang, kind) => fetch('/api/timedtext?v=abc123&ei=EIX&caps=asr&opi=1&exp=xpe&xoaf=5&hl=en&ip=0.0.0.0&ipbits=0&expire=9999999999&sparams=ip,ipbits,expire,v,caps,opi,exp,xoaf&signature=sig&key=yt8&lang=' + lang + (kind ? '&kind=' + kind : '') + '&fmt=json3&xorb=2&xobt=3&xovt=3&cbr=Chrome&cbrver=131&c=WEB&cver=2.20241120&cplayer=UNIPLAYER&cos=X11&cplatform=DESKTOP&potc=1&pot=POT123');
+  const buttonOnly = new URLSearchParams(location.search).get('cc') === 'button';
+  player.setOption = (m, o, v) => { window.__setOption = v; if (!buttonOnly) requestCaptions(v.languageCode, v.kind); };
+  const cc = document.createElement('button');
+  cc.className = 'ytp-subtitles-button';
+  cc.setAttribute('aria-pressed', 'false');
+  cc.textContent = 'CC';
+  cc.onclick = () => { cc.setAttribute('aria-pressed', 'true'); window.__ccClicked = true; requestCaptions('en'); };
+  player.appendChild(cc);
 </script>`));
       }
       if (p === '/api/timedtext') {
-        // Like YouTube today: no proof-of-origin token, no captions.
-        if (!url.searchParams.get('pot')) return send(200, 'application/json', '');
+        // Like YouTube today: without the player's proof-of-origin token (and client params), no captions.
+        if (!url.searchParams.get('pot') || url.searchParams.get('xorb') !== '2' || url.searchParams.get('c') !== 'WEB') return send(200, 'application/json', '');
         const cues = parseVtt(await readFile(path.join(fixtures, 'subs', 'en.vtt'), 'utf8'));
         const tlang = url.searchParams.get('tlang');
-        const events = [{ tStartMs: 0, dDurationMs: 30000, id: 1, wWinId: 1 }];
+        const asr = url.searchParams.get('kind') === 'asr';
+        const events = [{ tStartMs: 0, dDurationMs: 30000, id: 1, wWinId: 1, wsWinStyleId: 1 }];
         for (const c of cues) {
-          events.push({ tStartMs: Math.round(c.start * 1000), dDurationMs: Math.round((c.end - c.start) * 1000), segs: [{ utf8: tlang ? `[yt-${tlang}] ${c.text}` : c.text }] });
-          events.push({ tStartMs: Math.round(c.end * 1000), dDurationMs: 10, aAppend: 1, segs: [{ utf8: '\n' }] });
+          const ms = (s) => Math.round(s * 1000);
+          if (asr) {
+            // Auto-captions: a few words at a time, each line staying up while the next one types out.
+            const words = c.text.split(' ');
+            const half = Math.ceil(words.length / 2);
+            const mid = c.start + (c.end - c.start) / 2;
+            events.push({ tStartMs: ms(c.start), dDurationMs: ms(c.end - c.start), wWinId: 1, segs: words.slice(0, half).map((w, i) => ({ utf8: (i ? ' ' : '') + w, tOffsetMs: i * 150, acAsrConf: 200 })) });
+            events.push({ tStartMs: ms(mid), dDurationMs: ms(c.end - c.start), wWinId: 1, segs: words.slice(half).map((w, i) => ({ utf8: (i ? ' ' : '') + w, tOffsetMs: i * 150, acAsrConf: 200 })) });
+          } else {
+            events.push({ tStartMs: ms(c.start), dDurationMs: ms(c.end - c.start), segs: [{ utf8: tlang ? `[yt-${tlang}] ${c.text}` : c.text }] });
+          }
+          events.push({ tStartMs: ms(c.end), dDurationMs: 10, aAppend: 1, segs: [{ utf8: '\n' }] });
         }
         return send(200, 'application/json', JSON.stringify({ wireMagic: 'pb3', events }));
-      }
-
-      // ---------------------------------------------------------- Disney+
-      if (p === '/disney.html') {
-        return send(200, 'text/html', page('Disney+ mock', `<div class="title-field">Mock Disney Movie</div>
-<video id="v" src="/media/test.webm" style="width:960px;height:540px" muted preload="auto"></video>
-<script>setTimeout(() => fetch('/hls/master.m3u8').then((r) => r.text()), 200);</script>`));
-      }
-      if (p === '/hls/master.m3u8') {
-        return send(200, 'application/vnd.apple.mpegurl', `#EXTM3U
-#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aac",LANGUAGE="en",NAME="English",URI="audio/en.m3u8"
-#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="sub",NAME="English",LANGUAGE="en",AUTOSELECT=YES,URI="subs/en/index.m3u8"
-#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="sub",NAME="Español (Latinoamérica)",LANGUAGE="es-419",AUTOSELECT=YES,URI="subs/es/index.m3u8"
-#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="sub-forced",NAME="English",LANGUAGE="en",FORCED=YES,URI="subs/en/index.m3u8"
-#EXT-X-STREAM-INF:BANDWIDTH=2000000,SUBTITLES="sub",AUDIO="aac"
-video/1.m3u8
-`);
-      }
-      const hlsIdx = p.match(/^\/hls\/subs\/(en|es)\/index\.m3u8$/);
-      if (hlsIdx) {
-        return send(200, 'application/vnd.apple.mpegurl', `#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXTINF:10.0,\nseg0.vtt\n#EXTINF:10.0,\nseg1.vtt\n#EXTINF:10.0,\nseg2.vtt\n#EXT-X-ENDLIST\n`);
-      }
-      const hlsSeg = p.match(/^\/hls\/subs\/(en|es)\/seg(\d)\.vtt$/);
-      if (hlsSeg) {
-        const cues = parseVtt(await readFile(path.join(fixtures, 'subs', `${hlsSeg[1]}.vtt`), 'utf8'));
-        const n = Number(hlsSeg[2]);
-        // Each 10 s segment carries the cues overlapping it (boundary cues are repeated, like real HLS).
-        const inSeg = cues.filter((c) => c.end > n * 10 && c.start < (n + 1) * 10);
-        const ts = (s) => new Date(s * 1000).toISOString().slice(11, 23);
-        const body = `WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:900000,LOCAL:00:00:00.000\n\n${inSeg.map((c) => `${ts(c.start)} --> ${ts(c.end)}\n${c.text}`).join('\n\n')}\n`;
-        return send(200, 'text/vtt', body);
-      }
-
-      // ---------------------------------------------------------- Prime Video
-      if (p === '/prime.html') {
-        return send(200, 'text/html', page('Prime mock', `<div class="webPlayerSDKContainer"><div class="rendererContainer">
-<video id="v" src="/media/test.webm" style="width:960px;height:540px" muted preload="auto"></video></div></div>
-<script>setTimeout(() => fetch('/cdp/catalog/GetPlaybackResources?asin=amzn1.dv.gti.MOCK&desiredResources=PlaybackUrls,SubtitleUrls').then((r) => r.json()), 200);</script>`));
-      }
-      if (p === '/cdp/catalog/GetPlaybackResources') {
-        return send(200, 'application/json', JSON.stringify({
-          catalogMetadata: { catalog: { title: 'Prime Mock Title' } },
-          timedTextUrls: { result: {
-            subtitleUrls: [
-              { url: `${base}/subs/en.ttml`, languageCode: 'en-us', displayName: 'English', type: 'subtitle', timedTextTrackId: 'en-sub' },
-              { url: `${base}/subs/es.dfxp`, languageCode: 'es-es', displayName: 'Español', type: 'subtitle', timedTextTrackId: 'es-sub' },
-            ],
-            forcedNarratives: [{ url: `${base}/subs/en.ttml`, languageCode: 'en-us', displayName: 'English [Forced]', type: 'forced', timedTextTrackId: 'en-forced' }],
-          } },
-        }));
       }
 
       // ---------------------------------------------------------- mock speech-to-text

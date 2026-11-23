@@ -20,6 +20,7 @@ export class NetflixAdapter extends SiteAdapter {
   readonly site = 'netflix' as const;
   override hideNativeCss = '.player-timedtext, .player-timedtext-text-container { visibility: hidden !important; }';
   private byMovie = new Map<string, TrackInfo[]>();
+  private titles = new Map<string, string>();
 
   start() {
     this.bridge.on('netflix:manifest', (p: { movieId: string; tracks: NetflixTrack[] }) => {
@@ -38,7 +39,10 @@ export class NetflixAdapter extends SiteAdapter {
   currentVideo(): VideoInfo | null {
     const m = location.pathname.match(/\/watch\/(\d+)/);
     if (!m) return null;
-    const title = textOf('[data-uia="video-title"]') || document.title.replace(/\s*\|\s*Netflix.*$/i, '') || 'Netflix';
+    // The title element only exists while the player controls are visible: remember it.
+    const shown = textOf('[data-uia="video-title"]');
+    if (shown) this.titles.set(m[1], shown);
+    const title = this.titles.get(m[1]) || document.title.replace(/\s*[|-]\s*Netflix.*$/i, '') || 'Netflix';
     return { site: 'netflix', id: m[1], title, url: `https://www.netflix.com/watch/${m[1]}` };
   }
 
@@ -60,6 +64,14 @@ export class NetflixAdapter extends SiteAdapter {
       }
     }
     throw lastErr ?? new Error('No subtitle URL');
+  }
+
+  override play(video: HTMLVideoElement) {
+    this.bridge.request('netflix:play').catch(() => video.play().catch(() => {}));
+  }
+
+  override pause(video: HTMLVideoElement) {
+    this.bridge.request('netflix:pause').catch(() => video.pause());
   }
 
   override seek(video: HTMLVideoElement, time: number) {

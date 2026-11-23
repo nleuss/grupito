@@ -35,6 +35,22 @@ export abstract class SiteAdapter {
     video.currentTime = Math.max(0, time);
   }
 
+  play(video: HTMLVideoElement): void {
+    video.play().catch(() => {});
+  }
+
+  pause(video: HTMLVideoElement): void {
+    video.pause();
+  }
+
+  /** Report how many pixels subtitles should move up while the site's player controls are visible. */
+  observeControls(_cb: (liftPx: number) => void): void {}
+
+  /** True while subtitles must not be shown (e.g. an ad is playing in the same <video>). */
+  isSuppressed(): boolean {
+    return false;
+  }
+
   /** Seconds to add to video.currentTime to get the subtitle timeline. */
   timeOffset(_video: HTMLVideoElement): number {
     return 0;
@@ -76,7 +92,7 @@ export function pickMainVideo(videos: HTMLVideoElement[]): HTMLVideoElement | nu
   return best;
 }
 
-/** querySelectorAll that also descends into open shadow roots (Disney+ uses web components). */
+/** querySelectorAll that also descends into open shadow roots (players built with web components). */
 export function deepQueryAll<T extends Element>(selector: string, root: ParentNode = document, depth = 0, out: T[] = []): T[] {
   out.push(...Array.from(root.querySelectorAll<T>(selector)));
   if (depth > 6) return out;

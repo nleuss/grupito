@@ -2,7 +2,7 @@
   "name": "vidioma",
   "version": "0.1.0",
   "private": true,
-  "description": "Chrome extension for learning languages with dual subtitles on Netflix, YouTube, Disney+, Prime Video and local videos.",
+  "description": "Chrome extension for learning languages with dual subtitles on YouTube and Netflix.",
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",

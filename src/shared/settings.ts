@@ -5,7 +5,7 @@ import { browserLang } from './languages';
 
 export const DEFAULT_SETTINGS: Settings = {
   enabled: true,
-  sites: { netflix: true, youtube: true, disney: true, prime: true },
+  sites: { netflix: true, youtube: true },
   targetLang: 'en',
   nativeLang: 'es',
   uiLang: 'auto',

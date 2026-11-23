@@ -8,6 +8,7 @@ const EN = {
   loadFailed: 'Could not load subtitles: {0}',
   translationTrackFailed: 'Translation track unavailable ({0}). Using machine translation.',
   translateFailed: 'Translation failed: {0}',
+  switchedToSiteTranslation: "Machine translation isn't responding: using YouTube's translation.",
   syncOffset: 'Subtitle delay {0}s',
   toastSaved: 'Saved to your vocabulary',
   toastSentenceSaved: 'Sentence saved',
@@ -63,7 +64,7 @@ const EN = {
   shortcutsHelp: 'A / S / D previous · repeat · next line — Q auto-pause — W translation — E reveal — R romanization — G transcript — [ ] delay',
 
   // popup
-  popupNoVideo: 'Open a video on Netflix, YouTube, Disney+ or Prime Video, or a page with a video player.',
+  popupNoVideo: 'Open a video on YouTube or Netflix (or use it on any page with a video player).',
   popupUseHere: 'Use on this page',
   popupActive: 'Active',
   popupDisabledSite: 'Disabled on this site',
@@ -194,6 +195,7 @@ const ES: Record<Key, string> = {
   loadFailed: 'No se pudieron cargar los subtítulos: {0}',
   translationTrackFailed: 'Pista de traducción no disponible ({0}). Uso traducción automática.',
   translateFailed: 'Falló la traducción: {0}',
+  switchedToSiteTranslation: 'La traducción automática no responde: uso la traducción de YouTube.',
   syncOffset: 'Retraso de subtítulos {0}s',
   toastSaved: 'Guardado en tu vocabulario',
   toastSentenceSaved: 'Frase guardada',
@@ -248,7 +250,7 @@ const ES: Record<Key, string> = {
   loadFile: 'Cargar archivo de subtítulos',
   shortcutsHelp: 'A / S / D línea anterior · repetir · siguiente — Q pausa automática — W traducción — E revelar — R romanización — G transcripción — [ ] retraso',
 
-  popupNoVideo: 'Abre un vídeo en Netflix, YouTube, Disney+ o Prime Video, o una página con un reproductor de vídeo.',
+  popupNoVideo: 'Abre un vídeo en YouTube o Netflix (o úsalo en cualquier página con un reproductor de vídeo).',
   popupUseHere: 'Usar en esta página',
   popupActive: 'Activo',
   popupDisabledSite: 'Desactivado en este sitio',

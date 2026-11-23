@@ -98,18 +98,7 @@ chrome.commands?.onCommand.addListener(async (command, tab) => {
 // ------------------------------------------------------------------ subtitle fetching
 
 // Only hosts that serve subtitle files; keeps content scripts from using the worker as a generic proxy.
-const FETCH_ALLOW = [
-  /(^|\.)nflxvideo\.net$/,
-  /(^|\.)nflxso\.net$/,
-  /(^|\.)dssott\.com$/,
-  /(^|\.)disney-plus\.net$/,
-  /(^|\.)bamgrid\.com$/,
-  /(^|\.)pv-cdn\.net$/,
-  /(^|\.)cloudfront\.net$/,
-  /(^|\.)media-amazon\.com$/,
-  /(^|\.)aiv-cdn\.net$/,
-  /(^|\.)youtube\.com$/,
-];
+const FETCH_ALLOW = [/(^|\.)nflxvideo\.net$/, /(^|\.)nflxso\.net$/, /(^|\.)youtube\.com$/];
 
 async function fetchText(url: string) {
   const u = new URL(url);

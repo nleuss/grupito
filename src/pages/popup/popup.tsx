@@ -6,7 +6,7 @@ import { errorMessage } from '../../shared/util';
 import { t } from '../../ui/i18n';
 import { Brand, LanguageSelect, Switch, mount, openPage, useSettings } from '../shared';
 
-const SITE_NAMES: Record<StreamingSite, string> = { netflix: 'Netflix', youtube: 'YouTube', disney: 'Disney+', prime: 'Prime Video' };
+const SITE_NAMES: Record<StreamingSite, string> = { netflix: 'Netflix', youtube: 'YouTube' };
 
 function siteOf(url: string | undefined): StreamingSite | null {
   if (!url) return null;
@@ -14,8 +14,6 @@ function siteOf(url: string | undefined): StreamingSite | null {
     const h = new URL(url).hostname;
     if (/netflix\.com$/.test(h)) return 'netflix';
     if (/youtube\.com$/.test(h)) return 'youtube';
-    if (/disneyplus\.com$/.test(h)) return 'disney';
-    if (/primevideo\.com$/.test(h) || /(^|\.)amazon\./.test(h)) return 'prime';
   } catch {
     /* ignore */
   }

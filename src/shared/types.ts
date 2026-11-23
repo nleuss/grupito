@@ -1,8 +1,8 @@
 // Core data types shared by every part of the extension.
 
-export type SiteId = 'netflix' | 'youtube' | 'disney' | 'prime' | 'generic' | 'local';
-export type StreamingSite = 'netflix' | 'youtube' | 'disney' | 'prime';
-export const STREAMING_SITES: StreamingSite[] = ['netflix', 'youtube', 'disney', 'prime'];
+export type SiteId = 'netflix' | 'youtube' | 'generic' | 'local';
+export type StreamingSite = 'netflix' | 'youtube';
+export const STREAMING_SITES: StreamingSite[] = ['youtube', 'netflix'];
 
 /** One subtitle cue. Times are in seconds on the video's own timeline. */
 export interface Cue {

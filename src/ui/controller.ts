@@ -2,7 +2,7 @@
 // Shared by the content script (streaming sites) and the local player page.
 import type { Cue, ExplainResult, LineAnalysis, LookupResult, Settings, SttSegment, TrackInfo, VideoInfo } from '../shared/types';
 import { Store } from '../shared/store';
-import { activeCueIndices, alignCues, lastStartedIndex, normalizeCues } from '../subtitles/cues';
+import { activeCueIndices, alignCues, lastStartedIndex, mergeFragments, normalizeCues } from '../subtitles/cues';
 import { cueToSingleLine } from '../subtitles/text';
 import { baseLang, languageName, sameLang } from '../shared/languages';
 import { chunkBy, errorMessage } from '../shared/util';
@@ -22,6 +22,11 @@ export interface PlayerHost {
   videoInfo(): VideoInfo | null;
   loadTrack(track: TrackInfo): Promise<Cue[]>;
   loadSiteTranslation?(track: TrackInfo, lang: string): Promise<Cue[] | null>;
+  /** Site-specific play/pause (Netflix prefers its player API). */
+  play?(): void;
+  pause?(): void;
+  /** True while no subtitles should be shown (e.g. a YouTube ad is playing). */
+  suppressed?(): boolean;
 }
 
 export interface PopupState {
@@ -97,6 +102,8 @@ export class SubtitleController {
   private toastTimer: ReturnType<typeof setTimeout> | undefined;
   private hoverPaused = false;
   private aiCues: Cue[] = [];
+  /** The user chose the translation source by hand: keep it when the subtitle track changes. */
+  private translationPinned = false;
   readonly timeMap = new TimeMap();
   private videoEl: HTMLVideoElement | null = null;
 
@@ -162,6 +169,7 @@ export class SubtitleController {
     this.machine.clear();
     this.analyses.clear();
     this.aiCues = [];
+    this.translationPinned = false;
     this.armed = this.lastArmedFor = -1;
     this.store.set({ tracks: [], primaryId: null, translationId: null, cues: [], active: [], current: -1, status: 'idle', message: '', popup: null, syncOffset: 0, version: this.state.version + 1 });
   }
@@ -218,8 +226,10 @@ export class SubtitleController {
     if (s.preferOfficialTranslation) {
       const official = bestTrack(this.state.tracks, s.nativeLang, primary.id);
       if (official) return official.id;
-      if (primary.siteTranslatable && this.host.loadSiteTranslation) return 'site';
     }
+    // Auto-captions are merged into sentences, which machine translation handles better than
+    // the site's line-by-line translation; human subtitles can use the site's translation.
+    if (primary.kind !== 'asr' && primary.siteTranslatable && this.host.loadSiteTranslation) return 'site';
     return 'machine';
   }
 
@@ -236,18 +246,20 @@ export class SubtitleController {
     try {
       const raw = track.kind === 'ai' ? this.aiCues : await this.host.loadTrack(track);
       if (gen !== this.gen) return;
-      const cues = normalizeCues(raw, { trimOverlaps: track.kind === 'asr' || track.kind === 'ai' });
+      let cues = normalizeCues(raw, { trimOverlaps: track.kind === 'asr' || track.kind === 'ai' });
+      if (track.kind === 'asr') cues = mergeFragments(cues, track.lang);
       this.store.set({ cues, status: cues.length ? 'ready' : 'empty', message: cues.length ? '' : t('emptyTrack'), version: this.state.version + 1 });
       const cur = this.state.translationId;
       const valid = cur === 'machine' || (cur === 'site' && track.siteTranslatable) || (cur && cur !== id && this.state.tracks.some((t) => t.id === cur));
-      await this.selectTranslation(keepTranslation && valid ? cur : this.defaultTranslation(track));
+      await this.selectTranslation(keepTranslation && this.translationPinned && valid ? cur : this.defaultTranslation(track));
       this.pumpAnalyses();
     } catch (e) {
       if (gen === this.gen) this.store.set({ status: 'error', message: t('loadFailed', errorMessage(e)) });
     }
   }
 
-  async selectTranslation(id: TranslationSource) {
+  async selectTranslation(id: TranslationSource, byUser = false) {
+    if (byUser) this.translationPinned = true;
     const gen = this.gen;
     this.aligned = null;
     this.store.set({ translationId: id, version: this.state.version + 1 });
@@ -376,6 +388,12 @@ export class SubtitleController {
         if (gen !== this.gen) return;
         this.translateFailures++;
         this.translateBlockedUntil = Date.now() + Math.min(60000, 2000 * 2 ** this.translateFailures);
+        const primary = this.primaryTrack();
+        if (this.translateFailures >= 2 && primary?.siteTranslatable && this.host.loadSiteTranslation) {
+          this.showToast(t('switchedToSiteTranslation'));
+          this.selectTranslation('site');
+          return;
+        }
         if (this.translateFailures <= 2) this.showToast(t('translateFailed', errorMessage(e)), true);
       })
       .finally(() => {
@@ -449,10 +467,25 @@ export class SubtitleController {
     return v ? v.currentTime + this.host.timeOffset() + this.state.syncOffset : 0;
   }
 
+  private play(v: HTMLVideoElement) {
+    if (this.host.play) this.host.play();
+    else v.play().catch(() => {});
+  }
+
+  private pause(v: HTMLVideoElement) {
+    if (this.host.pause) this.host.pause();
+    else v.pause();
+  }
+
   tick() {
     const v = this.video();
     const st = this.state;
     if (!v || !st.cues.length) return;
+    if (this.host.suppressed?.()) {
+      if (st.active.length) this.store.set({ active: [] });
+      this.armed = -1;
+      return;
+    }
     const time = v.currentTime + this.host.timeOffset() + st.syncOffset;
     const active = activeCueIndices(st.cues, time);
     const current = lastStartedIndex(st.cues, time);
@@ -460,7 +493,7 @@ export class SubtitleController {
     if (st.settings.autoPause && !v.paused && this.armed >= 0) {
       const c = st.cues[this.armed];
       if (c && time >= c.end - 0.12 && time < c.end + 0.6) {
-        v.pause();
+        this.pause(v);
         this.armed = -1;
       }
     }
@@ -489,7 +522,7 @@ export class SubtitleController {
     this.host.seek(this.toVideoTime(cue.start) + 0.02);
     this.armed = i;
     this.lastArmedFor = i;
-    if (play && v.paused) v.play().catch(() => {});
+    if (play && v.paused) this.play(v);
   }
 
   prev() {
@@ -515,8 +548,8 @@ export class SubtitleController {
   togglePlay() {
     const v = this.video();
     if (!v) return;
-    if (v.paused) v.play().catch(() => {});
-    else v.pause();
+    if (v.paused) this.play(v);
+    else this.pause(v);
   }
 
   setRate(rate: number) {
@@ -534,14 +567,14 @@ export class SubtitleController {
   hoverStart() {
     const v = this.video();
     if (this.state.settings.pauseOnHover && v && !v.paused) {
-      v.pause();
+      this.pause(v);
       this.hoverPaused = true;
     }
   }
 
   hoverEnd() {
     const v = this.video();
-    if (this.hoverPaused && v && v.paused && !this.state.popup) v.play().catch(() => {});
+    if (this.hoverPaused && v && v.paused && !this.state.popup) this.play(v);
     this.hoverPaused = false;
   }
 
@@ -554,7 +587,7 @@ export class SubtitleController {
     if (!token) return;
     const v = this.video();
     const wasPlaying = st.popup?.wasPlaying ?? (!!v && !v.paused);
-    if (st.settings.pauseOnWordClick && v && !v.paused) v.pause();
+    if (st.settings.pauseOnWordClick && v && !v.paused) this.pause(v);
     const sentence = cueToSingleLine(st.cues[cueIndex].text);
     const popup: PopupState = {
       cueIndex,
@@ -590,7 +623,7 @@ export class SubtitleController {
     if (!p) return;
     this.store.set({ popup: null });
     const v = this.video();
-    if (p.wasPlaying && this.state.settings.resumeAfterPopup && v?.paused) v.play().catch(() => {});
+    if (p.wasPlaying && this.state.settings.resumeAfterPopup && v?.paused) this.play(v);
   }
 
   async explainWord() {

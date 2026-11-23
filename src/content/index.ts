@@ -31,6 +31,7 @@ class ContentApp {
   private nativeStyle: HTMLStyleElement | null = null;
   private resizeObs: ResizeObserver | null = null;
   private site = detectSite(location);
+  private lift = 0;
 
   constructor(private bridge: MainBridge) {}
 
@@ -43,6 +44,9 @@ class ContentApp {
     const host: PlayerHost = {
       getVideo: () => this.video,
       seek: (time) => this.video && this.adapter.seek(this.video, time),
+      play: () => this.video && this.adapter.play(this.video),
+      pause: () => this.video && this.adapter.pause(this.video),
+      suppressed: () => this.adapter.isSuppressed(),
       timeOffset: () => (this.video ? this.adapter.timeOffset(this.video) : 0),
       videoInfo: () => this.adapter.currentVideo(),
       loadTrack: (t) => this.adapter.loadTrack(t),
@@ -50,6 +54,10 @@ class ContentApp {
     };
     this.ctl = new SubtitleController(host, runtimeServices, this.settings);
     this.adapter.start();
+    this.adapter.observeControls((lift) => {
+      this.lift = lift;
+      this.hostEl?.style.setProperty('--vd-lift', `${lift}px`);
+    });
 
     onSettingsChanged((s) => {
       this.settings = s;
@@ -93,7 +101,7 @@ class ContentApp {
   private enabled(): boolean {
     const s = this.settings;
     if (!s.enabled) return false;
-    if (this.site === 'netflix' || this.site === 'youtube' || this.site === 'disney' || this.site === 'prime') return s.sites[this.site] !== false;
+    if (this.site === 'netflix' || this.site === 'youtube') return s.sites[this.site] !== false;
     return true;
   }
 
@@ -128,6 +136,7 @@ class ContentApp {
     const hostEl = document.createElement('div');
     hostEl.id = 'vidioma-overlay';
     hostEl.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;z-index:2147483646;pointer-events:none;margin:0;padding:0;border:0;';
+    hostEl.style.setProperty('--vd-lift', `${this.lift}px`);
     // Closed in production so pages cannot read the overlay; open in test builds for E2E tests.
     const shadow = hostEl.attachShadow({ mode: __TEST__ ? 'open' : 'closed' });
     const style = document.createElement('style');

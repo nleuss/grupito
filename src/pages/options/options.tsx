@@ -12,10 +12,8 @@ import { Brand, LanguageSelect, Switch, mount, toast, useSettings } from '../sha
 import { CLAUDE_MODELS } from '../../background/claude-models';
 
 const SITES: { id: StreamingSite; name: string }[] = [
-  { id: 'netflix', name: 'Netflix' },
   { id: 'youtube', name: 'YouTube' },
-  { id: 'disney', name: 'Disney+' },
-  { id: 'prime', name: 'Prime Video' },
+  { id: 'netflix', name: 'Netflix' },
 ];
 
 function Section({ title, children }: { title: string; children: ComponentChildren }) {

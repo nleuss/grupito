@@ -27,7 +27,8 @@ input {
 .vd-subs {
   position: absolute;
   left: 50%;
-  bottom: var(--vd-bottom, 9%);
+  bottom: calc(var(--vd-bottom, 9%) + var(--vd-lift, 0px));
+  transition: bottom 0.18s ease;
   transform: translateX(-50%);
   width: max-content;
   max-width: min(92%, 1400px);

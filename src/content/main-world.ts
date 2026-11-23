@@ -1,7 +1,7 @@
 // Runs in the page's MAIN world at document_start.
 // Observes the subtitle data the site's own player downloads (fetch / XHR / JSON.parse) and
 // forwards compact descriptions to the isolated content script. It also exposes a few
-// player actions that need page context (Netflix seeking, YouTube caption API, same-origin fetch).
+// player actions that need page context (Netflix player API, YouTube caption API, same-origin fetch).
 //
 // Everything sent across is plain data; nothing received from the isolated world is evaluated.
 
@@ -32,58 +32,55 @@ type Json = Record<string, unknown>;
   const isYouTube = forced ? forced === 'youtube' : /(^|\.)youtube\.com$/.test(host);
   const isNetflix = forced ? forced === 'netflix' : /(^|\.)netflix\.com$/.test(host);
 
-  // ------------------------------------------------------------------ helpers
+  // ------------------------------------------------------------------ network observation
   const SUB_URL = /\.(vtt|webvtt|srt|ttml2?|dfxp|xml)(\?|#|$)|[?&](fmt|format)=(vtt|ttml|dfxp|srv3|json3)/i;
-  const PRIME_URL = /GetPlaybackResources|GetVodPlaybackResources|\/playback\/prs\//i;
   const M3U8_URL = /\.m3u8(\?|#|$)/i;
 
-  function classify(url: string): 'yt-timedtext' | 'yt-player' | 'prime' | 'm3u8' | 'subtitle' | null {
+  type Kind = 'yt-timedtext' | 'yt-player' | 'm3u8' | 'subtitle';
+
+  function classify(url: string): Kind | null {
     if (isYouTube) {
       if (url.includes('/api/timedtext')) return 'yt-timedtext';
       if (url.includes('/youtubei/v1/player')) return 'yt-player';
       return null;
     }
-    if (PRIME_URL.test(url)) return 'prime';
+    if (isNetflix) return null; // Netflix subtitles come from the manifest (see below).
     if (M3U8_URL.test(url)) return 'm3u8';
     if (SUB_URL.test(url)) return 'subtitle';
     return null;
   }
 
-  function handleBody(kind: NonNullable<ReturnType<typeof classify>>, url: string, text: string) {
+  function absolute(url: string): string {
+    try {
+      return new URL(url, location.href).href;
+    } catch {
+      return url;
+    }
+  }
+
+  /** Called when a request is sent: lets us learn YouTube's caption URL (with its token) even if the body is empty. */
+  function onRequest(kind: Kind, url: string) {
+    if (kind === 'yt-timedtext') post('yt:timedtextUrl', { url: absolute(url) });
+  }
+
+  function onResponse(kind: Kind, url: string, text: string) {
     if (!text || text.length > 8_000_000) return;
     try {
       switch (kind) {
         case 'yt-timedtext':
-          post('yt:timedtext', { url, text });
+          post('yt:timedtext', { url: absolute(url), text });
           break;
         case 'yt-player': {
-          const pr = JSON.parse(text);
-          const c = ytCompact(pr);
-          if (c) post('yt:player', c);
-          break;
-        }
-        case 'prime': {
-          const data = JSON.parse(text);
-          const tracks = primeTracks(data);
-          if (tracks.length) {
-            let videoId = '';
-            try {
-              videoId = new URL(url, location.href).searchParams.get('asin') ?? '';
-            } catch {
-              /* ignore */
-            }
-            const meta = (data as Json).catalogMetadata as Json | undefined;
-            const title = ((meta?.catalog as Json | undefined)?.title as string | undefined) ?? '';
-            post('prime:resources', { videoId, title, tracks });
-          }
+          const c = ytCompact(JSON.parse(text));
+          if (c?.videoId) post('yt:player', c);
           break;
         }
         case 'm3u8':
-          if (text.includes('TYPE=SUBTITLES')) post('hls:master', { url, text });
+          if (text.includes('TYPE=SUBTITLES')) post('hls:master', { url: absolute(url), text });
           break;
         case 'subtitle':
           if (/^\uFEFF?\s*(WEBVTT|<\?xml|<tt|<(\w+:)?tt[\s>]|\d+\s*\r?\n\d\d:\d\d)/.test(text.slice(0, 200))) {
-            post('sub:captured', { url, text });
+            post('sub:captured', { url: absolute(url), text });
           }
           break;
       }
@@ -92,7 +89,6 @@ type Json = Record<string, unknown>;
     }
   }
 
-  // ------------------------------------------------------------------ fetch hook
   const origFetch = window.fetch;
   window.fetch = function (this: unknown, input: RequestInfo | URL, init?: RequestInit) {
     const p = origFetch.apply(this, [input, init] as [RequestInfo | URL, RequestInit | undefined]);
@@ -100,12 +96,13 @@ type Json = Record<string, unknown>;
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
       const kind = classify(url);
       if (kind) {
+        onRequest(kind, url);
         p.then((res) => {
           if (!res.ok) return;
           res
             .clone()
             .text()
-            .then((t) => handleBody(kind, res.url || url, t))
+            .then((t) => onResponse(kind, res.url || url, t))
             .catch(() => {});
         }).catch(() => {});
       }
@@ -115,7 +112,6 @@ type Json = Record<string, unknown>;
     return p;
   } as typeof window.fetch;
 
-  // ------------------------------------------------------------------ XHR hook
   const XHR = XMLHttpRequest.prototype;
   const origOpen = XHR.open;
   const origSend = XHR.send;
@@ -133,6 +129,7 @@ type Json = Record<string, unknown>;
       const url = this[urlKey];
       const kind = url ? classify(url) : null;
       if (kind && url) {
+        onRequest(kind, url);
         this.addEventListener('load', () => {
           try {
             if (this.status < 200 || this.status >= 300) return;
@@ -140,7 +137,7 @@ type Json = Record<string, unknown>;
             if (this.responseType === '' || this.responseType === 'text') text = this.responseText;
             else if (this.responseType === 'json') text = JSON.stringify(this.response);
             else if (this.responseType === 'arraybuffer' && this.response) text = new TextDecoder().decode(this.response as ArrayBuffer);
-            handleBody(kind, this.responseURL || url, text);
+            onResponse(kind, this.responseURL || url, text);
           } catch {
             /* ignore */
           }
@@ -152,20 +149,39 @@ type Json = Record<string, unknown>;
     return origSend.call(this, body);
   };
 
-  // ------------------------------------------------------------------ Netflix manifest
+  // ------------------------------------------------------------------ Netflix
+  // Netflix's player builds a JSON manifest request and parses the JSON manifest response.
+  // We add text subtitle formats to the request and read the subtitle track list from the response.
+  const NETFLIX_SUB_PROFILES = ['webvtt-lssdh-ios8', 'dfxp-ls-sdh', 'imsc1.1'];
+
+  function patchManifestRequest(value: unknown) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    const v = value as Json;
+    const isManifest = typeof v.url === 'string' && /manifest/i.test(v.url);
+    const candidates: unknown[] = isManifest ? [v, ...Object.values(v)] : [v, v.params];
+    for (const c of candidates) {
+      if (!c || typeof c !== 'object' || !Array.isArray((c as Json).profiles)) continue;
+      const cc = c as Json;
+      if (!isManifest && cc.viewableId == null && cc.type !== 'standard') continue;
+      const profiles = cc.profiles as unknown[];
+      for (const p of NETFLIX_SUB_PROFILES) if (!profiles.includes(p)) profiles.unshift(p);
+      cc.showAllSubDubTracks = true;
+    }
+  }
+
+  function inspectManifest(value: unknown) {
+    if (!value || typeof value !== 'object') return;
+    const r = ((value as Json).result ?? value) as Json;
+    if (r && Array.isArray(r.timedtexttracks) && r.movieId != null) {
+      post('netflix:manifest', { movieId: String(r.movieId), tracks: netflixTracks(r.timedtexttracks as Json[]) });
+    }
+  }
+
   if (isNetflix) {
     const origStringify = JSON.stringify;
     JSON.stringify = function (this: unknown, value: unknown, ...rest: unknown[]) {
       try {
-        // Ask for WebVTT and the full list of subtitle languages in manifest requests.
-        if (value && typeof value === 'object') {
-          const params = ((value as Json).params ?? value) as Json;
-          if (Array.isArray(params?.profiles) && (params.viewableId != null || params.type === 'standard')) {
-            const profiles = params.profiles as string[];
-            if (!profiles.includes('webvtt-lssdh-ios8')) profiles.push('webvtt-lssdh-ios8');
-            params.showAllSubDubTracks = true;
-          }
-        }
+        patchManifestRequest(value);
       } catch {
         /* ignore */
       }
@@ -176,17 +192,25 @@ type Json = Record<string, unknown>;
     JSON.parse = function (this: unknown, text: string, reviver?: (this: unknown, key: string, value: unknown) => unknown) {
       const value = origParse.call(this, text, reviver);
       try {
-        if (value && typeof value === 'object' && typeof text === 'string' && text.length > 500) {
-          const r = ((value as Json).result ?? value) as Json;
-          if (r && Array.isArray(r.timedtexttracks) && r.movieId != null) {
-            post('netflix:manifest', { movieId: String(r.movieId), tracks: netflixTracks(r.timedtexttracks as Json[]) });
-          }
-        }
+        if (typeof text === 'string' && text.length > 500 && text.includes('timedtexttracks')) inspectManifest(value);
       } catch {
         /* ignore */
       }
       return value;
     } as typeof JSON.parse;
+
+    // In case the player ever parses the manifest with Response.json() instead of JSON.parse.
+    const origJson = Response.prototype.json;
+    Response.prototype.json = function (this: Response) {
+      return origJson.call(this).then((value: unknown) => {
+        try {
+          inspectManifest(value);
+        } catch {
+          /* ignore */
+        }
+        return value;
+      });
+    };
   }
 
   function netflixTracks(list: Json[]) {
@@ -217,12 +241,18 @@ type Json = Record<string, unknown>;
     return out;
   }
 
-  function netflixPlayer(): { seek(ms: number): void } | null {
+  interface NetflixPlayer {
+    seek(ms: number): void;
+    play(): void;
+    pause(): void;
+  }
+
+  function netflixPlayer(): NetflixPlayer | null {
     try {
       const w = window as unknown as Json;
       const vp = ((((w.netflix as Json)?.appContext as Json)?.state as Json)?.playerApp as { getAPI(): Json }).getAPI().videoPlayer as {
         getAllPlayerSessionIds(): string[];
-        getVideoPlayerBySessionId(id: string): { seek(ms: number): void };
+        getVideoPlayerBySessionId(id: string): NetflixPlayer;
       };
       const ids = vp.getAllPlayerSessionIds();
       const id = ids.find((i) => i.includes('watch')) ?? ids[ids.length - 1];
@@ -232,36 +262,11 @@ type Json = Record<string, unknown>;
     }
   }
 
-  // ------------------------------------------------------------------ Prime Video
-  function primeTracks(data: unknown) {
-    const found: (Json & { forced?: boolean })[] = [];
-    const visit = (o: unknown, depth: number) => {
-      if (!o || typeof o !== 'object' || depth > 7) return;
-      for (const [k, v] of Object.entries(o as Json)) {
-        if ((k === 'subtitleUrls' || k === 'forcedNarratives') && Array.isArray(v)) {
-          for (const x of v) if (x && typeof x === 'object') found.push({ ...(x as Json), forced: k === 'forcedNarratives' });
-        } else if (v && typeof v === 'object') visit(v, depth + 1);
-      }
-    };
-    visit(data, 0);
-    return found
-      .filter((x) => typeof x.url === 'string')
-      .map((x) => ({
-        id: String(x.timedTextTrackId ?? x.trackGroupId ?? `${x.languageCode}-${x.type}-${x.subtype ?? ''}`),
-        lang: String(x.languageCode ?? 'und'),
-        label: String(x.displayName ?? x.languageCode ?? 'Subtitles'),
-        cc: x.type === 'sdh' || /sdh|cc/i.test(String(x.subtype ?? '')),
-        forced: !!x.forced || x.type === 'forced' || x.type === 'narrative',
-        url: x.url as string,
-      }));
-  }
-
   // ------------------------------------------------------------------ YouTube
   interface YtPlayer extends HTMLElement {
     getPlayerResponse?: () => Json;
     setOption?: (module: string, option: string, value: unknown) => void;
     loadModule?: (m: string) => void;
-    getVideoData?: () => { video_id: string };
   }
 
   function ytCompact(pr: Json | null | undefined) {
@@ -274,7 +279,7 @@ type Json = Record<string, unknown>;
       videoId: String(details?.videoId ?? ''),
       title: String(details?.title ?? ''),
       tracks: ((tl.captionTracks as Json[] | undefined) ?? []).map((t) => ({
-        baseUrl: String(t.baseUrl),
+        baseUrl: absolute(String(t.baseUrl)),
         lang: String(t.languageCode),
         label: name(t.name as Json) || String(t.languageCode),
         kind: (t.kind as string) ?? '',
@@ -290,10 +295,9 @@ type Json = Record<string, unknown>;
   }
 
   function ytCurrent() {
-    const p = ytPlayer();
     let pr: Json | null = null;
     try {
-      pr = p?.getPlayerResponse?.() ?? null;
+      pr = ytPlayer()?.getPlayerResponse?.() ?? null;
     } catch {
       /* ignore */
     }
@@ -306,8 +310,7 @@ type Json = Record<string, unknown>;
       const c = ytCurrent();
       if (c?.videoId) post('yt:player', c);
     };
-    document.addEventListener('yt-navigate-finish', () => setTimeout(announce, 300));
-    document.addEventListener('yt-page-data-updated', () => setTimeout(announce, 300));
+    for (const ev of ['yt-navigate-finish', 'yt-page-data-updated', 'yt-player-updated']) document.addEventListener(ev, () => setTimeout(announce, 300));
     window.addEventListener('DOMContentLoaded', () => setTimeout(announce, 500));
   }
 
@@ -323,10 +326,14 @@ type Json = Record<string, unknown>;
           reply(true, { status: res.status, text: await res.text() });
           break;
         }
-        case 'netflix:seek': {
+        case 'netflix:seek':
+        case 'netflix:play':
+        case 'netflix:pause': {
           const p = netflixPlayer();
           if (!p) throw new Error('Netflix player API not found');
-          p.seek(Number(d.payload?.ms));
+          if (d.type === 'netflix:seek') p.seek(Number(d.payload?.ms));
+          else if (d.type === 'netflix:play') p.play();
+          else p.pause();
           reply(true, true);
           break;
         }

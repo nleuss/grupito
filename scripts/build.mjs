@@ -14,16 +14,7 @@ const WATCH = process.argv.includes('--watch');
 const outdir = path.join(root, TEST ? 'dist-test' : 'dist');
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 
-const SITE_MATCHES = [
-  'https://www.netflix.com/*',
-  'https://www.youtube.com/*',
-  'https://m.youtube.com/*',
-  'https://www.disneyplus.com/*',
-  'https://www.primevideo.com/*',
-  ...['com', 'co.uk', 'de', 'co.jp', 'es', 'fr', 'it', 'ca', 'com.mx', 'com.br', 'in', 'com.au'].map(
-    (tld) => `https://www.amazon.${tld}/gp/video/*`,
-  ),
-];
+const SITE_MATCHES = ['https://www.youtube.com/*', 'https://www.netflix.com/*'];
 const TEST_MATCHES = ['http://localhost/*', 'http://127.0.0.1/*'];
 
 async function buildManifest() {

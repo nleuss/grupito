@@ -395,7 +395,7 @@ function Toolbar({ ctl, patchSettings }: { ctl: SubtitleController; patchSetting
             value={st.translationId ?? 'off'}
             onChange={(e) => {
               const v = (e.target as HTMLSelectElement).value;
-              ctl.selectTranslation(v === 'off' ? null : v);
+              ctl.selectTranslation(v === 'off' ? null : v, true);
             }}
           >
             <option value="off">{t('off')}</option>

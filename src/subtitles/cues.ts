@@ -36,6 +36,33 @@ export function normalizeCues(cues: Cue[], opts: NormalizeOptions = {}): Cue[] {
   return out;
 }
 
+const SENTENCE_END = /[.!?…。！？]["'»”)\]]?$/;
+const NO_SPACE_LANGS = /^(ja|zh|th|lo|km|my)/i;
+
+/**
+ * Join the short, overlapping fragments of auto-generated captions (YouTube ASR shows a few
+ * words at a time) into sentence-sized lines, which are easier to read and to translate.
+ */
+export function mergeFragments(cues: Cue[], lang: string, maxChars = 90, maxDuration = 7, maxGap = 0.6): Cue[] {
+  const sep = NO_SPACE_LANGS.test(lang) ? '' : ' ';
+  const out: Cue[] = [];
+  for (const c of cues) {
+    const text = c.text.replace(/\s*\n\s*/g, sep).trim();
+    const prev = out[out.length - 1];
+    if (
+      prev &&
+      c.start - prev.end <= maxGap &&
+      prev.text.length + sep.length + text.length <= maxChars &&
+      c.end - prev.start <= maxDuration &&
+      !SENTENCE_END.test(prev.text)
+    ) {
+      prev.text += sep + text;
+      prev.end = Math.max(prev.end, c.end);
+    } else out.push({ start: c.start, end: c.end, text });
+  }
+  return out;
+}
+
 /** Index of the last cue whose start <= t, or -1. */
 export function lastStartedIndex(cues: Cue[], t: number): number {
   let lo = 0;

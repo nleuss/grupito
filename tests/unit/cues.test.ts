@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeCueIndices, alignCues, normalizeCues, toSrt } from '../../src/subtitles/cues';
+import { activeCueIndices, alignCues, mergeFragments, normalizeCues, toSrt } from '../../src/subtitles/cues';
 import { isHlsMaster, parseHlsMaster, parseHlsMedia } from '../../src/subtitles/hls';
 import { romanizeKorean, romanizeLine } from '../../src/text/romanize';
 import { tokenize } from '../../src/text/tokenize';
@@ -28,6 +28,32 @@ describe('normalizeCues', () => {
       { trimOverlaps: true },
     );
     expect(cues[0].end).toBe(2);
+  });
+});
+
+describe('mergeFragments (YouTube auto-captions)', () => {
+  it('joins fragments until sentence punctuation, length or duration limits', () => {
+    const frags: Cue[] = [
+      { start: 1, end: 2.2, text: 'Hello there, how' },
+      { start: 2.2, end: 3.5, text: 'are you today?' },
+      { start: 3.8, end: 5, text: 'so today we are' },
+      { start: 5, end: 6, text: 'going to talk about' },
+      { start: 6, end: 7.2, text: 'the weather and' },
+      { start: 7.2, end: 8.5, text: 'many other things' },
+      { start: 10, end: 11, text: 'after a pause' },
+    ];
+    expect(mergeFragments(frags, 'en').map((c) => [c.start, c.end, c.text])).toEqual([
+      [1, 3.5, 'Hello there, how are you today?'],
+      [3.8, 8.5, 'so today we are going to talk about the weather and many other things'],
+      [10, 11, 'after a pause'],
+    ]);
+  });
+  it('caps long unpunctuated runs and joins CJK without spaces', () => {
+    const run: Cue[] = Array.from({ length: 12 }, (_, i) => ({ start: i, end: i + 1, text: 'word word word' }));
+    const merged = mergeFragments(run, 'en');
+    expect(merged.every((c) => c.end - c.start <= 7 && c.text.length <= 90)).toBe(true);
+    expect(merged.length).toBeGreaterThan(1);
+    expect(mergeFragments([{ start: 0, end: 1, text: '今日は' }, { start: 1, end: 2, text: 'いい天気' }], 'ja')[0].text).toBe('今日はいい天気');
   });
 });
 

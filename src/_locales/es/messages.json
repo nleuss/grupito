@@ -1,5 +1,5 @@
 {
   "appName": { "message": "Vidioma" },
-  "appDesc": { "message": "Aprende idiomas con subtítulos duales en Netflix, YouTube, Disney+, Prime Video y tus propios vídeos. Haz clic en cualquier palabra para ver su significado." },
+  "appDesc": { "message": "Aprende idiomas con subtítulos duales en YouTube y Netflix. Haz clic en cualquier palabra para ver su significado, guárdala y repásala en Anki." },
   "cmdAiCaptions": { "message": "Iniciar/detener subtítulos con IA (transcribe el audio de la pestaña)" }
 }

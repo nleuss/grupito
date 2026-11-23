@@ -128,61 +128,82 @@ describe('Vidioma extension', () => {
     await page.close();
   });
 
-  test('Netflix mock: manifest capture, official translation track, player-API seeking', async () => {
+  test('Netflix mock: manifest capture, official translation track, player-API seek/play/pause', async () => {
     const page = await openVideoPage(`${srv.base}/watch/80000001?vidioma_site=netflix`);
     await seek(page, 10.5);
     await text(page, '.vd-primary', 'Would you like a cup of coffee?');
     await text(page, '.vd-trans', '¿Te apetece una taza de café?');
 
-    const req = await page.evaluate(() => window.__manifestRequest);
-    assert.match(req, /webvtt-lssdh-ios8/);
-    assert.match(req, /"showAllSubDubTracks":true/);
+    const req = JSON.parse(await page.evaluate(() => window.__manifestRequest));
+    for (const p of ['webvtt-lssdh-ios8', 'dfxp-ls-sdh', 'imsc1.1']) assert.ok(req.params.profiles.includes(p), `requested ${p}`);
+    assert.ok(req.params.profiles.includes('playready-h264mpl30-dash'), 'kept the player profiles');
+    assert.equal(req.params.showAllSubDubTracks, true);
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.player-timedtext')).visibility), 'hidden');
 
     const labels = await page.locator('.vd-sel select').first().locator('option').allTextContents();
-    assert.deepEqual(labels, ['English', 'Español', 'English [CC]']);
+    assert.deepEqual(labels, ['English', 'Español', 'English [CC]'], 'next-episode manifest ignored');
 
     await page.keyboard.press('d');
     await page.waitForFunction(() => window.__seeks.length > 0);
     const seeks = await page.evaluate(() => window.__seeks);
     assert.ok(Math.abs(seeks[0] - 13020) < 50, `seek through player API (${seeks[0]})`);
+
+    // Clicking a word pauses through Netflix's player API; closing the card resumes it.
+    await seek(page, 16.2);
+    await page.evaluate(() => document.querySelector('video').play());
+    await page.locator('.vd-w', { hasText: /^understand$/ }).click();
+    await text(page, '.vd-pop-word', 'understand');
+    await page.waitForFunction(() => window.__playerCalls.includes('pause'));
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => window.__playerCalls.includes('play'));
+    await page.evaluate(() => document.querySelector('video').pause());
     await page.mouse.move(700, 300);
     await page.screenshot({ path: path.join(SHOTS, 'netflix-mock.png') });
     await page.close();
   });
 
-  test('YouTube mock: proof-of-origin token reuse and YouTube auto-translate', async () => {
+  test('YouTube mock: reuses the player caption request (token + client params) and YouTube auto-translate', async () => {
     const page = await openVideoPage(`${srv.base}/youtube.html?v=abc123&vidioma_site=youtube`);
     await seek(page, 13.5);
     await text(page, '.vd-primary', "Let's go to the beach tomorrow.");
     await text(page, '.vd-trans', "[yt-es] Let's go to the beach tomorrow.");
     const tt = srv.log.filter((l) => l.includes('/api/timedtext'));
-    assert.ok(tt.some((l) => !l.includes('pot=')), 'tried without token first');
-    assert.ok(tt.some((l) => l.includes('pot=POT123') && !l.includes('tlang')), 'player fetched with token');
-    assert.ok(tt.some((l) => l.includes('pot=POT123') && l.includes('tlang=es')), 'reused token for translation');
+    assert.ok(tt.some((l) => !l.includes('pot=')), 'tried the plain caption URL first');
+    assert.ok(tt.some((l) => l.includes('pot=POT123') && !l.includes('tlang')), 'player fetched with its token');
+    const translated = tt.find((l) => l.includes('tlang=es'));
+    assert.ok(translated, 'requested YouTube auto-translate');
+    for (const p of ['pot=POT123', 'xorb=2', 'c=WEB', 'cplayer=UNIPLAYER', 'lang=en', 'fmt=json3']) assert.ok(translated.includes(p), `translation request kept ${p}`);
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.ytp-caption-window-container')).display), 'none');
+
+    // Ads play in the same <video>: subtitles disappear while YouTube marks the player with "ad-showing".
+    await page.evaluate(() => document.getElementById('movie_player').classList.add('ad-showing'));
+    await page.locator('.vd-primary').waitFor({ state: 'detached' });
+    await page.evaluate(() => document.getElementById('movie_player').classList.remove('ad-showing'));
+    await text(page, '.vd-primary', "Let's go to the beach tomorrow.");
     await page.close();
   });
 
-  test('Disney+ mock: HLS WebVTT segments merged without duplicates', async () => {
-    const page = await openVideoPage(`${srv.base}/disney.html?vidioma_site=disney`);
-    await seek(page, 20.5);
-    await text(page, '.vd-primary', 'Can you speak more slowly, please?');
-    await text(page, '.vd-trans', '¿Puedes hablar más despacio, por favor?');
+  test('YouTube mock: auto-generated captions are merged into whole sentences', async () => {
+    const page = await openVideoPage(`${srv.base}/youtube.html?v=abc123&vidioma_site=youtube`);
+    await seek(page, 4.5);
+    await text(page, '.vd-primary', 'I am learning Spanish with movies.');
+    await page.locator('.vd-sel select').first().selectOption({ label: 'English (auto-generated) (auto)' });
+    await seek(page, 2.8);
+    await text(page, '.vd-primary', 'Hello there, how are you today?');
     await page.keyboard.press('g');
     await page.locator('.vd-tr-row').first().waitFor();
-    assert.equal(await page.locator('.vd-tr-row').count(), 9);
-    await page.screenshot({ path: path.join(SHOTS, 'disney-transcript.png') });
+    assert.equal(await page.locator('.vd-tr-row').count(), 9, 'fragments merged back into 9 sentences');
+    const transSel = await page.locator('.vd-sel select').nth(1).evaluate((s) => s.value);
+    assert.equal(transSel, 'machine', 'auto-captions use machine translation of whole sentences');
+    await text(page, '.vd-trans', '[es] Hello there, how are you today?');
     await page.close();
   });
 
-  test('Prime Video mock: TTML/DFXP tracks, forced narrative not auto-selected', async () => {
-    const page = await openVideoPage(`${srv.base}/prime.html?vidioma_site=prime`);
-    await seek(page, 16.5);
-    await text(page, '.vd-primary', "I don't understand this word.");
-    await text(page, '.vd-trans', 'No entiendo esta palabra.');
-    const selected = await page.locator('.vd-sel select').first().evaluate((s) => s.options[s.selectedIndex].text);
-    assert.equal(selected, 'English');
+  test('YouTube mock: falls back to pressing CC when the player API does not load captions', async () => {
+    const page = await openVideoPage(`${srv.base}/youtube.html?v=abc123&vidioma_site=youtube&cc=button`);
+    await seek(page, 7.5);
+    await text(page, '.vd-primary', 'The weather is beautiful this morning.', 25000);
+    assert.equal(await page.evaluate(() => window.__ccClicked), true);
     await page.close();
   });
 
