@@ -319,3 +319,125 @@ function verifyApkg(file, expect) {
   if (expect.meaning) assert.equal(summary.first.Meaning, expect.meaning);
   assert.equal(summary.media_files, expect.media, 'media files imported');
 }
+
+// ---------------------------------------------------------------- book reader
+
+const BOOK_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>
+  body { font-family: Georgia, serif; font-size: 13pt; line-height: 1.5; width: 10cm; text-align: justify; }
+  h1 { font-size: 28pt; } h2 { font-size: 20pt; page-break-before: always; }
+  p { margin: 0 0 0.7em; text-indent: 1.4em; }
+</style></head><body>
+<h1>Alice in Testland</h1>
+<h2>Chapter One</h2>
+${Array.from({ length: 7 }, (_, i) => `<p>Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do (paragraph ${i + 1}). Suddenly a white rabbit with pink eyes ran close by her, which was extra&shy;ordi&shy;narily curious, and she wondered what the rabbit could possibly be late for.</p>`).join('\n')}
+<h2>Chapter Two</h2>
+${Array.from({ length: 6 }, (_, i) => `<p>The pool of tears was much larger than Alice expected (part ${i + 1}), and the mouse that swam beside her seemed offended by every word she said about cats and dogs.</p>`).join('\n')}
+</body></html>`;
+
+async function makeBookPdf() {
+  const file = path.join(OUT, 'book.pdf');
+  const page = await ctx.newPage();
+  await page.setContent(BOOK_HTML);
+  await page.pdf({
+    path: file,
+    format: 'A5',
+    outline: true,
+    tagged: true,
+    displayHeaderFooter: true,
+    headerTemplate: '<div style="font-size:8px;width:100%;text-align:center">Alice in Testland - running header</div>',
+    footerTemplate: '<div style="font-size:8px;width:100%;text-align:center"><span class="pageNumber"></span></div>',
+    margin: { top: '1.6cm', bottom: '1.6cm', left: '1.2cm', right: '1.2cm' },
+  });
+  await page.close();
+  return file;
+}
+
+async function makeBookEpub() {
+  const { zipSync, strToU8 } = require('fflate');
+  const xhtml = (title, body) => `<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${title}</title></head><body>${body}</body></html>`;
+  const data = zipSync({
+    mimetype: strToU8('application/epub+zip'),
+    'META-INF/container.xml': strToU8('<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>'),
+    'OEBPS/content.opf': strToU8(`<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>El cuento de prueba</dc:title><dc:creator>Ana Autora</dc:creator><dc:language>en</dc:language></metadata>
+<manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="c1" href="ch1.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="ch2.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c1"/><itemref idref="c2"/></spine></package>`),
+    'OEBPS/nav.xhtml': strToU8(xhtml('TOC', '<nav><ol><li><a href="ch1.xhtml">First Part</a></li><li><a href="ch2.xhtml">Second Part</a></li></ol></nav>')),
+    'OEBPS/ch1.xhtml': strToU8(xhtml('1', '<h1>First Part</h1><p>The lighthouse keeper polished the great lamp every evening.</p>')),
+    'OEBPS/ch2.xhtml': strToU8(xhtml('2', '<h1>Second Part</h1><p>A storm arrived from the north before dawn.</p>')),
+  });
+  const file = path.join(OUT, 'book.epub');
+  (await import('node:fs')).writeFileSync(file, data);
+  return file;
+}
+
+describe('book reader', () => {
+  test('PDF: chapters from the outline, clean paragraphs, word card, book-aware AI, translations, saved progress', async () => {
+    await setSettings({ targetLang: 'en', nativeLang: 'es', translationProvider: 'mock' });
+    const pdf = await makeBookPdf();
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => console.log('[reader pageerror]', e.message));
+    await page.goto(`chrome-extension://${extId}/pages/reader.html`);
+    await page.locator('label.btn.primary input[type=file]').setInputFiles(pdf);
+    await page.locator('.rd-main .rd-p').first().waitFor({ timeout: 30000 });
+
+    const toc = await page.locator('.toc').allTextContents();
+    assert.ok(toc.includes('Chapter One') && toc.includes('Chapter Two'), `chapters from the PDF outline: ${JSON.stringify(toc)}`);
+    await page.locator('.toc', { hasText: 'Chapter One' }).click();
+    await text(page, '.rd-text', 'Alice was beginning to get very tired');
+    const paragraphs = await page.locator('.rd-main .rd-text').allTextContents();
+    const body = paragraphs.filter((p) => p.startsWith('Alice was beginning'));
+    assert.equal(body.length, 7, `7 paragraphs rebuilt (got ${body.length})`);
+    assert.ok(body.every((p) => p.includes('extraordinarily curious')), 'soft hyphens / line-break hyphens removed');
+    assert.ok(!paragraphs.some((p) => p.includes('running header')), 'running header removed');
+    assert.ok(!paragraphs.some((p) => /^\d+$/.test(p.trim())), 'page numbers removed');
+
+    // Word card with dictionary lookup, then the book-aware explanation.
+    await page.locator('.rd-w', { hasText: /^rabbit$/ }).first().click();
+    await text(page, '.vd-pop-word', 'rabbit');
+    await text(page, '.vd-pop-tr', '[es] rabbit');
+    await page.locator('.vd-btn.vd-ai').click();
+    await text(page, '.vd-explain', 'Book meaning of rabbit');
+    await page.screenshot({ path: path.join(SHOTS, 'reader-word-card.png') });
+    await page.locator('.vd-pop button[title="Save"]').click();
+    await text(page, '.toast', 'Saved to your vocabulary');
+    const savedWord = (await vocab()).find((v) => v.text === 'rabbit' && v.source?.site === 'book');
+    assert.ok(savedWord, 'saved with the book as source');
+    assert.match(savedWord.source.location, /Chapter One · ¶\d+/);
+    assert.ok(savedWord.context.includes('white rabbit with pink eyes'), 'sentence saved as context');
+    await page.keyboard.press('Escape');
+
+    // Paragraph translations.
+    await page.getByLabel('Translations').check();
+    await text(page, '.rd-tr', '[es] Alice was beginning to get very tired');
+
+    // Whole-book analysis (mocked Claude in the test build).
+    await page.getByRole('button', { name: /About the book/ }).click();
+    await page.getByRole('button', { name: /Analyse the whole book with AI/ }).click();
+    await text(page, '.rd-about', 'Mock premise of');
+    await text(page, '.rd-about dt', 'mome raths');
+    await page.screenshot({ path: path.join(SHOTS, 'reader-about.png') });
+
+    // Progress is remembered.
+    await page.locator('.toc', { hasText: 'Chapter Two' }).click();
+    await text(page, '.rd-section-title', 'Chapter Two');
+    await page.mouse.wheel(0, 300);
+    await page.waitForTimeout(1200);
+    await page.reload();
+    await text(page, '.book-title', 'Alice in Testland');
+    await page.getByRole('button', { name: 'Continue' }).first().click();
+    await text(page, '.rd-section-title', 'Chapter Two');
+    await page.close();
+  });
+
+  test('EPUB: metadata, table of contents and paragraphs', async () => {
+    const epub = await makeBookEpub();
+    const page = await ctx.newPage();
+    await page.goto(`chrome-extension://${extId}/pages/reader.html`);
+    await page.locator('label.btn.primary input[type=file]').setInputFiles(epub);
+    await page.locator('.rd-main .rd-p').first().waitFor({ timeout: 15000 });
+    assert.deepEqual(await page.locator('.toc').allTextContents(), ['First Part', 'Second Part']);
+    await text(page, '.rd-text', 'The lighthouse keeper polished the great lamp every evening.');
+    await page.getByRole('button', { name: /Next/ }).click();
+    await text(page, '.rd-text', 'A storm arrived from the north before dawn.');
+    await page.close();
+  });
+});

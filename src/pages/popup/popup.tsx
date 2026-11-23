@@ -55,6 +55,7 @@ function Popup() {
 
   if (!s) return <div class="pad muted">…</div>;
   const site = siteOf(tab?.url);
+  const isPdf = !!tab?.url && /^https?:\/\/[^?#]+\.pdf([?#]|$)/i.test(tab.url);
   const siteEnabled = site ? s.sites[site] !== false : true;
   const isWeb = !!tab?.url && /^https?:/.test(tab.url);
 
@@ -170,9 +171,18 @@ function Popup() {
         </label>
       </section>
 
+      {isPdf && (
+        <button class="btn primary wide" onClick={() => openPage(`pages/reader.html?url=${encodeURIComponent(tab!.url!)}`)}>
+          📖 {t('openThisPdf')}
+        </button>
+      )}
+
       <footer class="links">
         <button class="btn" onClick={() => openPage('pages/vocab.html')}>
           ★ {t('openVocab')}
+        </button>
+        <button class="btn" onClick={() => openPage('pages/reader.html')}>
+          📖 {t('openReader')}
         </button>
         <button class="btn" onClick={() => openPage('pages/player.html')}>
           ▶ {t('openPlayer')}

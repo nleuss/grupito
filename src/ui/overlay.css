@@ -138,6 +138,16 @@ ruby rt {
     transform: translateY(calc(-100% - 6px));
   }
 }
+.vd-pop.vd-pop-below {
+  transform: translateY(14px);
+  animation: vd-in-below 0.12s ease-out;
+}
+@keyframes vd-in-below {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
 .vd-pop-head {
   display: flex;
   align-items: center;

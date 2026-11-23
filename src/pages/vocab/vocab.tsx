@@ -220,6 +220,7 @@ function Vocab() {
                       v.source?.title
                     )}
                     {v.source?.time != null && <div class="muted">{formatTime(v.source.time)}</div>}
+                    {v.source?.location && <div class="muted">{v.source.location}</div>}
                   </td>
                   <td>
                     <select class="input status" value={v.status} onChange={(e) => updateVocab(v.id, { status: (e.target as HTMLSelectElement).value as VocabStatus })}>

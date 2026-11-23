@@ -115,7 +115,7 @@ type Handler<K extends BgType> = (req: BgRequests[K]['req'], sender: chrome.runt
 const handlers: { [K in BgType]: Handler<K> } = {
   async translate(req) {
     const [settings, secrets] = await Promise.all([loadSettings(), loadSecrets()]);
-    return translate(req.lines, req.from, req.to, settings, secrets, req.title);
+    return translate(req.lines, req.from, req.to, settings, secrets, req.title, req.context);
   },
   async lookup(req) {
     const [settings, secrets] = await Promise.all([loadSettings(), loadSecrets()]);

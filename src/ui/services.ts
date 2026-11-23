@@ -6,7 +6,7 @@ import { baseLang } from '../shared/languages';
 import { analyzeLocal } from '../text/tokenize';
 
 export interface Services {
-  translate(lines: string[], from: string, to: string, settings: Settings, title?: string): Promise<string[]>;
+  translate(lines: string[], from: string, to: string, settings: Settings, title?: string, context?: string): Promise<string[]>;
   lookup(word: string, lemma: string | undefined, sentence: string, from: string, to: string): Promise<LookupResult>;
   explain(word: string, sentence: string, from: string, to: string): Promise<ExplainResult>;
   analyze(lines: string[], lang: string): Promise<LineAnalysis[]>;
@@ -50,7 +50,7 @@ async function builtinTranslator(from: string, to: string): Promise<BuiltinTrans
 }
 
 export const runtimeServices: Services = {
-  async translate(lines, from, to, settings, title) {
+  async translate(lines, from, to, settings, title, context) {
     const provider = settings.translationProvider;
     if (provider === 'auto' || provider === 'chrome') {
       const tr = await builtinTranslator(from, to);
@@ -64,7 +64,7 @@ export const runtimeServices: Services = {
         throw new Error("Chrome's built-in translator is not available for this language pair");
       }
     }
-    return (await bg('translate', { lines, from, to, title })).translations;
+    return (await bg('translate', { lines, from, to, title, context })).translations;
   },
   lookup(word, lemma, sentence, from, to) {
     return bg('lookup', { word, lemma, sentence, from, to });

@@ -2,7 +2,7 @@
 import type { Cue, ExplainResult, LineAnalysis, LookupResult, SttSegment } from './types';
 
 export interface BgRequests {
-  translate: { req: { lines: string[]; from: string; to: string; title?: string }; res: { translations: string[]; provider: string } };
+  translate: { req: { lines: string[]; from: string; to: string; title?: string; context?: string }; res: { translations: string[]; provider: string } };
   lookup: { req: { word: string; lemma?: string; sentence: string; from: string; to: string }; res: LookupResult };
   explain: { req: { word: string; sentence: string; from: string; to: string }; res: ExplainResult };
   analyze: { req: { lines: string[]; lang: string }; res: { lines: LineAnalysis[] } };

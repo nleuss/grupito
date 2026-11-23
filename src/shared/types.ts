@@ -1,6 +1,6 @@
 // Core data types shared by every part of the extension.
 
-export type SiteId = 'netflix' | 'youtube' | 'generic' | 'local';
+export type SiteId = 'netflix' | 'youtube' | 'generic' | 'local' | 'book';
 export type StreamingSite = 'netflix' | 'youtube';
 export const STREAMING_SITES: StreamingSite[] = ['youtube', 'netflix'];
 
@@ -107,6 +107,8 @@ export interface VocabSource {
   videoId?: string;
   /** Position in the video, seconds. */
   time?: number;
+  /** Position in a book (chapter · paragraph). */
+  location?: string;
 }
 
 export interface VocabItem {

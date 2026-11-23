@@ -49,7 +49,7 @@ function highlight(sentence: string, word: string): string {
 
 export function vocabToFields(v: VocabItem): NoteFields {
   const src = v.source;
-  const when = src?.time != null ? ` · ${formatTime(src.time)}` : '';
+  const when = src?.time != null ? ` · ${formatTime(src.time)}` : src?.location ? ` · ${escapeHtml(src.location)}` : '';
   const link = src?.url ? `<a href="${escapeHtml(src.url)}">${escapeHtml(src.title || src.url)}</a>${when}` : src?.title ? `${escapeHtml(src.title)}${when}` : '';
   return {
     Word: escapeHtml(v.text),

@@ -40,6 +40,7 @@ async function copyStatic() {
     ['src/offscreen/pcm-worklet.js', 'pcm-worklet.js'],
     ['node_modules/kuromoji/dict', 'dict'],
     ['node_modules/sql.js/dist/sql-wasm-browser.wasm', 'vendor/sql-wasm-browser.wasm'],
+    ['node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs', 'vendor/pdf.worker.min.mjs'],
   ];
   for (const page of await readdir(path.join(root, 'src/pages'))) {
     for (const ext of ['html', 'css']) {
@@ -97,6 +98,8 @@ const builds = [
     },
     format: 'iife',
   },
+  // pdf.js is an ES module: the reader page is loaded with <script type="module">.
+  { entryPoints: { 'pages/reader': 'src/pages/reader/reader.tsx' }, format: 'esm', target: ['chrome116'] },
 ];
 
 async function buildAll() {

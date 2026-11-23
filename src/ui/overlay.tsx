@@ -4,9 +4,10 @@ import type { ComponentChildren } from 'preact';
 import type { Settings, Token } from '../shared/types';
 import { useStore } from '../shared/store';
 import { formatTime } from '../shared/util';
-import { baseLang, googleCode, hasRomanization } from '../shared/languages';
+import { baseLang, hasRomanization } from '../shared/languages';
 import type { SubtitleController } from './controller';
 import { readTextFile, pickFile, SUBTITLE_ACCEPT } from './files';
+import { WordCard } from './word-card';
 import { t } from './i18n';
 
 export interface OverlayProps {
@@ -162,135 +163,18 @@ function WordPopup({ ctl }: { ctl: SubtitleController }) {
   const ai = useStore(ctl.store, (x) => x.ai);
   const settings = useStore(ctl.store, (x) => x.settings);
   if (!popup) return null;
-  const lang = ctl.primaryTrack()?.lang ?? settings.targetLang;
-  const lk = popup.lookup;
-  const ex = popup.explain;
-  const reading = popup.reading && popup.reading !== popup.word ? popup.reading : lk?.romanization;
-  const gt = `https://translate.google.com/?sl=${googleCode(lang)}&tl=${googleCode(settings.nativeLang)}&text=${encodeURIComponent(popup.sentence)}&op=translate`;
-  const wk = `https://en.wiktionary.org/wiki/${encodeURIComponent(popup.lemma ?? popup.word)}`;
-
   return (
-    <div
-      class="vd-pop"
+    <WordCard
+      data={popup}
+      lang={ctl.primaryTrack()?.lang ?? settings.targetLang}
+      nativeLang={settings.nativeLang}
+      aiAvailable={ai.claude}
       style={{ left: `clamp(8px, ${popup.x}px - 170px, calc(100% - 348px))`, top: `${popup.y}px` }}
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-      onWheel={(e) => e.stopPropagation()}
-    >
-      <div class="vd-pop-head">
-        <div class="vd-pop-title">
-          <span class="vd-pop-word" lang={lang}>
-            {popup.word}
-          </span>
-          {reading && <span class="vd-pop-reading">{reading}</span>}
-        </div>
-        <button class="vd-ib" title={t('listen')} onClick={() => ctl.speakText(popup.lemma ?? popup.word)}>
-          🔊
-        </button>
-        <button class={`vd-ib${popup.saved ? ' vd-on' : ''}`} title={popup.saved ? t('saved') : t('save')} onClick={() => ctl.saveWord()}>
-          {popup.saved ? '★' : '☆'}
-        </button>
-        <button class="vd-ib" title={t('close')} onClick={() => ctl.closePopup()}>
-          ✕
-        </button>
-      </div>
-      <div class="vd-pop-body">
-        {popup.lemma && (
-          <div class="vd-pop-lemma">
-            {t('lemma')}: <b lang={lang}>{popup.lemma}</b>
-          </div>
-        )}
-        {popup.loading ? (
-          <div class="vd-pop-loading">
-            <span class="vd-spin" /> {t('lookingUp')}
-          </div>
-        ) : popup.error ? (
-          <div class="vd-err">{t('lookupFailed')}: {popup.error}</div>
-        ) : lk ? (
-          <>
-            {lk.translation && <div class="vd-pop-tr">{lk.translation}</div>}
-            {lk.entries.slice(0, 4).map((e) => (
-              <div class="vd-pop-entry">
-                <span class="vd-pos">{e.pos}</span> {e.terms.slice(0, 6).join(', ')}
-              </div>
-            ))}
-            {lk.definitions.length > 0 && (
-              <details class="vd-defs" open={!lk.entries.length}>
-                <summary>{t('definitions')}</summary>
-                <ol>
-                  {lk.definitions.slice(0, 5).map((d) => (
-                    <li>
-                      {d.pos && <span class="vd-pos">{d.pos}</span>} {d.text}
-                      {d.example && <div class="vd-ex">“{d.example}”</div>}
-                    </li>
-                  ))}
-                </ol>
-              </details>
-            )}
-            {!lk.translation && !lk.entries.length && !lk.definitions.length && <div class="vd-dim">{t('noResults')}</div>}
-          </>
-        ) : null}
-
-        <div class="vd-pop-ai">
-          {ex ? (
-            <div class="vd-explain">
-              <div class="vd-x-row">
-                <b>{t('meaningInContext')}</b> {ex.meaning}
-              </div>
-              {(ex.lemma || ex.partOfSpeech) && (
-                <div class="vd-x-row vd-dim">
-                  {ex.lemma}
-                  {ex.reading ? ` · ${ex.reading}` : ''}
-                  {ex.partOfSpeech ? ` · ${ex.partOfSpeech}` : ''}
-                </div>
-              )}
-              {ex.grammar && (
-                <div class="vd-x-row">
-                  <b>{t('grammar')}</b> {ex.grammar}
-                </div>
-              )}
-              {ex.otherMeanings.length > 0 && (
-                <div class="vd-x-row">
-                  <b>{t('otherMeanings')}</b> {ex.otherMeanings.join(' · ')}
-                </div>
-              )}
-              {ex.examples.length > 0 && (
-                <div class="vd-x-row">
-                  <b>{t('examples')}</b>
-                  <ul>
-                    {ex.examples.slice(0, 3).map((e) => (
-                      <li>
-                        <span lang={lang}>{e.text}</span> <span class="vd-dim">— {e.translation}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          ) : (
-            <button class="vd-btn vd-ai" disabled={!ai.claude || popup.explaining} onClick={() => ctl.explainWord()}>
-              {popup.explaining ? (
-                <>
-                  <span class="vd-spin" /> {t('explaining')}
-                </>
-              ) : (
-                `✨ ${t('explainAi')}`
-              )}
-            </button>
-          )}
-          {!ai.claude && !ex && <div class="vd-hint">{t('noAiKey')}</div>}
-          {popup.explainError && <div class="vd-err">{popup.explainError}</div>}
-        </div>
-      </div>
-      <div class="vd-pop-foot">
-        <a href={gt} target="_blank" rel="noreferrer">
-          Google Translate
-        </a>
-        <a href={wk} target="_blank" rel="noreferrer">
-          Wiktionary
-        </a>
-      </div>
-    </div>
+      onSpeak={() => ctl.speakText(popup.lemma ?? popup.word)}
+      onSave={() => ctl.saveWord()}
+      onExplain={() => ctl.explainWord()}
+      onClose={() => ctl.closePopup()}
+    />
   );
 }
 

@@ -45,6 +45,7 @@ export async function translate(
   settings: Settings,
   secrets: Secrets,
   title?: string,
+  context?: string,
 ): Promise<{ translations: string[]; provider: string }> {
   const provider = resolveProvider(settings, secrets);
   const tag = provider === 'claude' ? `claude:${settings.claudeModel}` : provider;
@@ -62,7 +63,7 @@ export async function translate(
         res = await deeplTranslate(secrets.deeplKey, src, from, to);
         break;
       case 'claude':
-        res = await claudeTranslate(secrets.claudeKey, settings.claudeModel, src, from, to, title);
+        res = await claudeTranslate(secrets.claudeKey, settings.claudeModel, src, from, to, title, context);
         break;
       default:
         res = await googleTranslate(src, from, to);
